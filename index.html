@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Architect Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Hide scrollbar for a cleaner look */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        /* Basic styling for the markdown output */
+        .markdown-body p { margin-bottom: 0.5rem; }
+        .markdown-body strong { font-weight: 600; color: #111827; }
+        .markdown-body code { background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.875em; }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen flex items-center justify-center p-4 sm:p-8">
+
+    <div class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full max-h-[800px] border border-slate-200">
+        
+        <div class="bg-slate-900 p-5 flex items-center shadow-md z-10">
+            <div class="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center text-white text-2xl mr-4 shadow-inner">
+                🤖
+            </div>
+            <div>
+                <h1 class="text-white font-semibold text-xl tracking-wide">n8n Core Architect</h1>
+                <div class="flex items-center mt-1 text-slate-400 text-sm">
+                    <span class="w-2.5 h-2.5 bg-emerald-400 rounded-full mr-2 animate-pulse"></span> 
+                    System Online
+                </div>
+            </div>
+        </div>
+
+        <div id="chat-box" class="flex-1 p-6 overflow-y-auto bg-slate-50 space-y-6 scrollbar-hide">
+            
+            <div class="flex items-start">
+                <div class="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm text-slate-700 max-w-[85%] border border-slate-200 markdown-body">
+                    Welcome! I'm the **n8n Core Architect**. I bridge user intent and automated execution. <br><br>How can I help you automate your workflow today?
+                </div>
+            </div>
+
+        </div>
+
+        <div class="p-4 bg-white border-t border-slate-200">
+            <form id="chat-form" class="flex space-x-3">
+                <input type="text" id="chat-input" required
+                    class="flex-1 bg-slate-100 rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 transition-all placeholder-slate-400" 
+                    placeholder="Describe what you want to automate...">
+                
+                <button type="submit" id="send-btn"
+                    class="bg-indigo-600 text-white rounded-xl px-6 py-4 font-semibold flex items-center justify-center hover:bg-indigo-700 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Send
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const WEBHOOK_URL = 'https://ashan123123.app.n8n.cloud/webhook/e0ec8743-aea6-4d1d-99fb-24042007fa9a/chat';
+        
+        // Generate a random session ID so memory works properly
+        const sessionId = 'session-' + Math.random().toString(36).substring(2, 15);
+
+        // --- DOM ELEMENTS ---
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatBox = document.getElementById('chat-box');
+        const sendBtn = document.getElementById('send-btn');
+
+        // --- CORE LOGIC ---
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            // 1. Add User message to UI
+            appendMessage(text, 'user');
+            chatInput.value = '';
+            
+            // 2. Show loading state
+            const loadingId = appendLoading();
+            sendBtn.disabled = true;
+
+            try {
+                // 3. Send to n8n Webhook
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        chatInput: text, 
+                        sessionId: sessionId 
+                    })
+                });
+
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                
+                // 4. Remove loading & Add Bot response
+                document.getElementById(loadingId).remove();
+                
+                // n8n AI Agents usually return the text in an "output" property
+                const botReply = data.output || data.text || "Error: Could not parse response.";
+                appendMessage(botReply, 'bot');
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById(loadingId).remove();
+                appendMessage("**System Error:** Connection to n8n failed.", 'bot');
+            } finally {
+                sendBtn.disabled = false;
+                chatInput.focus();
+            }
+        });
+
+        // --- UI FUNCTIONS ---
+        function appendMessage(text, sender) {
+            const div = document.createElement('div');
+            div.className = sender === 'user' ? 'flex items-end justify-end' : 'flex items-start';
+            
+            const innerDiv = document.createElement('div');
+            if (sender === 'user') {
+                innerDiv.className = 'bg-indigo-600 text-white p-4 rounded-2xl rounded-tr-none shadow-md max-w-[85%]';
+                innerDiv.textContent = text; // Plain text for user
+            } else {
+                innerDiv.className = 'bg-white p-4 rounded-2xl rounded-tl-none shadow-sm text-slate-700 max-w-[85%] border border-slate-200 markdown-body text-sm sm:text-base leading-relaxed';
+                innerDiv.innerHTML = marked.parse(text); // Markdown for bot
+            }
+
+            div.appendChild(innerDiv);
+            chatBox.appendChild(div);
+            scrollToBottom();
+        }
+
+        function appendLoading() {
+            const id = 'loading-' + Date.now();
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = 'flex items-start';
+            div.innerHTML = `
+                <div class="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-200 flex space-x-2 items-center h-12">
+                    <div class="w-2 h-2 bg-slate-300 rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                </div>
+            `;
+            chatBox.appendChild(div);
+            scrollToBottom();
+            return id;
+        }
+
+        function scrollToBottom() {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
